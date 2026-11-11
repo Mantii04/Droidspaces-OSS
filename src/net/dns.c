@@ -30,6 +30,39 @@ static const char k_dns_v4_first[] = DNS_LINE(DS_DNS_DEFAULT_1)
 static const char k_dns_v6_first[] = DNS_LINE(DS_DNS_DEFAULT_6)
     DNS_LINE(DS_DNS_DEFAULT_1) DNS_LINE(DS_DNS_DEFAULT_2);
 
+/* Helper to auto-detect the host's real DNS on Android */
+static int get_android_dns(char *out, size_t size) {
+  FILE *fp = popen("dumpsys connectivity 2>/dev/null | grep 'DnsAddresses' | head -n 1", "r");
+  if (!fp) return 0;
+
+  int count = 0;
+  char line[1024];
+  if (fgets(line, sizeof(line), fp)) {
+    char *p = line;
+    while ((p = strstr(p, " /")) != NULL) {
+      p += 2;
+      char *end = strchr(p, ' ');
+      if (!end) end = p + strlen(p);
+      char ip[64];
+      size_t len = end - p;
+      if (len < sizeof(ip)) {
+        strncpy(ip, p, len);
+        ip[len] = '\0';
+        if (strchr(ip, ':') == NULL) { /* IPv4 only */
+          char ns_line[128];
+          snprintf(ns_line, sizeof(ns_line), "nameserver %s\n", ip);
+          strncat(out, ns_line, size - strlen(out) - 1);
+          count++;
+          if (count >= 2) break; /* Max 2 DNS servers */
+        }
+      }
+      p = end;
+    }
+  }
+  pclose(fp);
+  return count;
+}
+
 int ds_get_dns_servers(const char *custom_dns, char *out, size_t size) {
   out[0] = '\0';
   int count = 0;
@@ -48,6 +81,11 @@ int ds_get_dns_servers(const char *custom_dns, char *out, size_t size) {
       count++;
       token = strtok_r(NULL, ", ", &saveptr);
     }
+  }
+
+  /* 0b. Auto-detect Android's real DNS to bypass firewall drops */
+  if (count == 0 && is_android()) {
+    count = get_android_dns(out, size);
   }
 
   /* 1. Global stable fallbacks (defined in net/net.h) */
