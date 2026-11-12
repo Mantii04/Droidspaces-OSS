@@ -131,19 +131,7 @@ int setup_veth_host_side(struct ds_config *cfg, pid_t child_pid) {
     ds_log("[NET] Bridgeless Fallback: skipping bridge creation.");
   }
 
-  /* Late-stage hardening: sysctl for bridge */
-  if (cfg->net_mode == DS_NET_NAT) {
-    ds_log("[DEBUG] Applying late-stage hardening for Android NAT...");
-    if (!cfg->net_bridgeless) {
-      if (access("/proc/sys/net/bridge", F_OK) == 0) {
-        write_file("/proc/sys/net/bridge/bridge-nf-call-iptables", "0");
-        write_file("/proc/sys/net/bridge/bridge-nf-call-ip6tables", "0");
-      }
-    } else {
-      write_file("/proc/sys/net/ipv4/conf/all/rp_filter", "0");
-      write_file("/proc/sys/net/ipv4/conf/default/rp_filter", "0");
-    }
-  }
+  /* Global sysctl modifications removed to prevent breaking Android's netd. */
 
   /* 2. iptables rules - the same set the route monitor reinstalls whenever
    * netd flushes the tables out from under us. */
