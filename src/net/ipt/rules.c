@@ -18,7 +18,10 @@
 #include "internal.h"
 
 static const char *const k_mss_spec[] = {
-    "-p", "tcp",    "--tcp-flags",         "SYN,RST", "SYN",
+    "-s", "172.28.0.0/16", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN",
+    "-j", "TCPMSS", "--clamp-mss-to-pmtu", NULL};
+static const char *const k_mss_spec6[] = {
+    "-s", "fd64:7370::/48", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN",
     "-j", "TCPMSS", "--clamp-mss-to-pmtu", NULL};
 
 /* Public API: ds_ipt_host_rules_present
@@ -363,7 +366,7 @@ int ds_ipt_ensure_mss_clamp(int family) {
   ds_log("[IPT] ensure_mss_clamp: %s", f->bin);
 
   int ret = -ENOTSUP;
-  int fd = open_raw_socket(f);
+  int fd = -1; /* Force binary fallback to use scoped subnet */
   if (fd >= 0) {
     struct ipt_getinfo info;
     unsigned char *base = NULL;
@@ -390,7 +393,7 @@ int ds_ipt_ensure_mss_clamp(int family) {
 
   ds_log("[IPT] %s TCPMSS raw path failed (ret=%d), using the binary", f->bin,
          ret);
-  return bin_ensure(f, "mangle", "POSTROUTING", k_mss_spec);
+  return bin_ensure(f, "mangle", "POSTROUTING", family == AF_INET6 ? k_mss_spec6 : k_mss_spec);
 }
 
 /* Remove one of our rules: raw first, then the binary.
